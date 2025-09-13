@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
+import { bluetoothService } from '../services/BluetoothService';
 
 interface Message {
   id: string;
@@ -25,32 +27,169 @@ interface Message {
   type: 'text' | 'image';
 }
 
+interface PeerDevice {
+  id: string;
+  name: string;
+  rssi: number;
+  isConnected: boolean;
+  services: string[];
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [username, setUsername] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
+  const [connectedPeers, setConnectedPeers] = useState<PeerDevice[]>([]);
+  const [isBluetoothReady, setIsBluetoothReady] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    initializeUser();
-    loadMessages();
-    // Simulasi koneksi mesh (akan diganti dengan implementasi real)
-    simulateMeshConnection();
+    initializeApp();
+    
+    return () => {
+      // Cleanup on unmount
+      bluetoothService.disconnectAll();
+    };
   }, []);
+
+  const initializeApp = async () => {
+    try {
+      await initializeUser();
+      await requestBluetoothPermissions();
+      await initializeBluetooth();
+      loadMessages();
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      Alert.alert('Error', 'Gagal menginisialisasi aplikasi');
+    }
+  };
 
   const initializeUser = async () => {
     try {
       let storedUsername = await AsyncStorage.getItem('username');
       if (!storedUsername) {
-        storedUsername = `User${Math.floor(Math.random() * 1000)}`;
+        storedUsername = `GobUser${Math.floor(Math.random() * 1000)}`;
         await AsyncStorage.setItem('username', storedUsername);
       }
       setUsername(storedUsername);
     } catch (error) {
       console.error('Error initializing user:', error);
     }
+  };
+
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ]);
+
+        const allPermissionsGranted = Object.values(granted).every(
+          (permission) => permission === PermissionsAndroid.RESULTS.GRANTED
+        );
+
+        if (!allPermissionsGranted) {
+          Alert.alert(
+            'Izin Diperlukan',
+            'Gobchat memerlukan izin Bluetooth dan Lokasi untuk berkomunikasi dengan perangkat lain',
+            [{ text: 'OK' }]
+          );
+          return false;
+        }
+        return true;
+      } catch (error) {
+        console.error('Error requesting permissions:', error);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const initializeBluetooth = async () => {
+    try {
+      const initialized = await bluetoothService.initialize();
+      setIsBluetoothReady(initialized);
+
+      if (initialized) {
+        // Setup message handler
+        const removeMessageHandler = bluetoothService.onMessage((message) => {
+          const newMessage: Message = {
+            id: message.id,
+            text: message.text,
+            timestamp: message.timestamp,
+            isSent: false,
+            username: message.sender,
+            type: message.type,
+          };
+          
+          setMessages(prev => {
+            const updated = [...prev, newMessage];
+            saveMessages(updated);
+            return updated;
+          });
+
+          // Auto scroll to bottom
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        });
+
+        // Setup connection handler
+        const removeConnectionHandler = bluetoothService.onConnection((device, connected) => {
+          setConnectedPeers(bluetoothService.getConnectedDevices());
+          
+          if (connected) {
+            console.log(`Terhubung dengan ${device.name}`);
+          } else {
+            console.log(`Terputus dari ${device.name}`);
+          }
+        });
+
+        // Start scanning for devices
+        startScanning();
+
+        return () => {
+          removeMessageHandler();
+          removeConnectionHandler();
+        };
+      } else {
+        Alert.alert(
+          'Bluetooth Tidak Tersedia',
+          'Pastikan Bluetooth diaktifkan untuk menggunakan Gobchat',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error initializing Bluetooth:', error);
+      Alert.alert('Error', 'Gagal menginisialisasi Bluetooth');
+    }
+  };
+
+  const startScanning = async () => {
+    if (!isBluetoothReady) {
+      Alert.alert('Error', 'Bluetooth belum siap');
+      return;
+    }
+
+    setIsScanning(true);
+    try {
+      await bluetoothService.startScanning();
+      setIsScanning(bluetoothService.isBluetoothScanning());
+    } catch (error) {
+      console.error('Error starting scan:', error);
+      Alert.alert('Error', 'Gagal memulai pencarian perangkat');
+      setIsScanning(false);
+    }
+  };
+
+  const stopScanning = () => {
+    bluetoothService.stopScanning();
+    setIsScanning(false);
   };
 
   const loadMessages = async () => {
@@ -76,36 +215,21 @@ export default function ChatScreen() {
     }
   };
 
-  const simulateMeshConnection = () => {
-    // Simulasi koneksi mesh - akan diganti dengan implementasi real
-    setTimeout(() => {
-      setIsConnected(true);
-    }, 2000);
-
-    // Simulasi pesan masuk dari peer lain
-    setTimeout(() => {
-      const incomingMessage: Message = {
-        id: uuid.v4() as string,
-        text: 'Halo! Saya terhubung melalui jaringan mesh!',
-        timestamp: new Date(),
-        isSent: false,
-        username: 'MeshUser123',
-        type: 'text',
-      };
-      handleIncomingMessage(incomingMessage);
-    }, 5000);
-  };
-
-  const handleIncomingMessage = (message: Message) => {
-    setMessages(prev => {
-      const newMessages = [...prev, message];
-      saveMessages(newMessages);
-      return newMessages;
-    });
-  };
-
   const sendMessage = async () => {
     if (!inputText.trim()) return;
+
+    if (!isBluetoothReady) {
+      Alert.alert('Error', 'Bluetooth belum siap');
+      return;
+    }
+
+    if (connectedPeers.length === 0) {
+      Alert.alert(
+        'Tidak Ada Koneksi',
+        'Tidak ada perangkat yang terhubung. Pesan akan disimpan secara lokal.',
+        [{ text: 'OK' }]
+      );
+    }
 
     const newMessage: Message = {
       id: uuid.v4() as string,
@@ -116,15 +240,20 @@ export default function ChatScreen() {
       type: 'text',
     };
 
+    // Add to local messages
     const updatedMessages = [...messages, newMessage];
     setMessages(updatedMessages);
     await saveMessages(updatedMessages);
     setInputText('');
 
-    // Simulasi pengiriman melalui mesh network
-    if (isConnected) {
-      // Di sini akan diimplementasikan pengiriman real melalui mesh/bluetooth
-      console.log('Sending message via mesh network:', newMessage);
+    // Send via Bluetooth
+    try {
+      const sent = await bluetoothService.sendMessage(newMessage.text, 'text');
+      if (!sent && connectedPeers.length > 0) {
+        Alert.alert('Warning', 'Gagal mengirim pesan ke beberapa perangkat');
+      }
+    } catch (error) {
+      console.error('Error sending message via Bluetooth:', error);
     }
 
     // Auto scroll to bottom
@@ -163,17 +292,35 @@ export default function ChatScreen() {
     </View>
   );
 
-  const showMediaOptions = () => {
+  const showConnectionInfo = () => {
+    const deviceInfo = bluetoothService.getDeviceInfo();
+    const connectionCount = bluetoothService.getConnectionCount();
+    
     Alert.alert(
-      'Kirim Media',
-      'Pilih jenis media yang ingin dikirim',
+      'Info Koneksi',
+      `Perangkat: ${deviceInfo.name}\n` +
+      `ID: ${deviceInfo.id.substring(0, 8)}...\n` +
+      `Terhubung: ${connectionCount} perangkat\n` +
+      `Status: ${isBluetoothReady ? 'Siap' : 'Tidak Siap'}`,
       [
-        { text: 'Foto', onPress: () => console.log('Camera pressed') },
-        { text: 'Galeri', onPress: () => console.log('Gallery pressed') },
-        { text: 'File', onPress: () => console.log('File pressed') },
-        { text: 'Batal', style: 'cancel' }
+        { text: 'Scan Ulang', onPress: startScanning },
+        { text: 'OK' }
       ]
     );
+  };
+
+  const getConnectionStatus = () => {
+    if (!isBluetoothReady) return 'Bluetooth tidak aktif';
+    if (isScanning) return 'Mencari perangkat...';
+    if (connectedPeers.length === 0) return 'Tidak ada koneksi';
+    return `Terhubung: ${connectedPeers.length} perangkat`;
+  };
+
+  const getStatusColor = () => {
+    if (!isBluetoothReady) return '#FF5722';
+    if (isScanning) return '#FF9800';
+    if (connectedPeers.length === 0) return '#FF5722';
+    return '#4CAF50';
   };
 
   return (
@@ -182,20 +329,29 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
+        
+        <TouchableOpacity style={styles.headerCenter} onPress={showConnectionInfo}>
           <Text style={styles.headerTitle}>Gobchat</Text>
           <View style={styles.connectionStatus}>
             <View style={[
               styles.statusDot,
-              { backgroundColor: isConnected ? '#4CAF50' : '#FF5722' }
+              { backgroundColor: getStatusColor() }
             ]} />
             <Text style={styles.statusText}>
-              {isConnected ? 'Terhubung' : 'Mencoba terhubung...'}
+              {getConnectionStatus()}
             </Text>
           </View>
-        </View>
-        <TouchableOpacity style={styles.settingsButton}>
-          <Ionicons name="settings-outline" size={24} color="#ffffff" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.scanButton}
+          onPress={isScanning ? stopScanning : startScanning}
+        >
+          <Ionicons 
+            name={isScanning ? "stop" : "scan"} 
+            size={24} 
+            color="#ffffff" 
+          />
         </TouchableOpacity>
       </View>
 
@@ -216,7 +372,7 @@ export default function ChatScreen() {
         <View style={styles.inputRow}>
           <TouchableOpacity 
             style={styles.mediaButton}
-            onPress={showMediaOptions}
+            onPress={() => Alert.alert('Coming Soon', 'Fitur media akan segera tersedia')}
           >
             <Ionicons name="add" size={24} color="#e94560" />
           </TouchableOpacity>
@@ -229,15 +385,16 @@ export default function ChatScreen() {
             placeholderTextColor="#8a8a8a"
             multiline
             maxLength={500}
+            editable={isBluetoothReady}
           />
           
           <TouchableOpacity 
             style={[
               styles.sendButton,
-              { opacity: inputText.trim() ? 1 : 0.5 }
+              { opacity: (inputText.trim() && isBluetoothReady) ? 1 : 0.5 }
             ]}
             onPress={sendMessage}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || !isBluetoothReady}
           >
             <Ionicons name="send" size={20} color="white" />
           </TouchableOpacity>
@@ -288,7 +445,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8a8a8a',
   },
-  settingsButton: {
+  scanButton: {
     padding: 8,
   },
   messagesList: {

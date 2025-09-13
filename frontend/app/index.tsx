@@ -16,22 +16,33 @@ export default function WelcomeScreen() {
             <Ionicons name="chatbubbles" size={80} color="#16213e" />
           </View>
           <Text style={styles.appName}>Gobchat</Text>
-          <Text style={styles.tagline}>Chat tanpa batas dengan jaringan mesh</Text>
+          <Text style={styles.tagline}>Chat P2P Real-Time dengan Bluetooth</Text>
         </View>
 
         <View style={styles.featuresContainer}>
           <View style={styles.featureItem}>
-            <Ionicons name="wifi" size={24} color="#0f3460" />
-            <Text style={styles.featureText}>Jaringan Mesh Real-time</Text>
-          </View>
-          <View style={styles.featureItem}>
             <Ionicons name="bluetooth" size={24} color="#0f3460" />
-            <Text style={styles.featureText}>Koneksi Bluetooth</Text>
+            <Text style={styles.featureText}>Komunikasi Bluetooth Langsung</Text>
           </View>
           <View style={styles.featureItem}>
-            <Ionicons name="images" size={24} color="#0f3460" />
-            <Text style={styles.featureText}>Kirim Media</Text>
+            <Ionicons name="people" size={24} color="#0f3460" />
+            <Text style={styles.featureText}>Peer-to-Peer Tanpa Internet</Text>
           </View>
+          <View style={styles.featureItem}>
+            <Ionicons name="shield-checkmark" size={24} color="#0f3460" />
+            <Text style={styles.featureText}>Komunikasi Aman & Privat</Text>
+          </View>
+          <View style={styles.featureItem}>
+            <Ionicons name="location" size={24} color="#0f3460" />
+            <Text style={styles.featureText}>Jangkauan Lokal Real-Time</Text>
+          </View>
+        </View>
+
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>
+            Gobchat memungkinkan Anda berkomunikasi langsung dengan perangkat terdekat 
+            menggunakan teknologi Bluetooth tanpa memerlukan koneksi internet.
+          </Text>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -115,6 +126,18 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginLeft: 16,
     fontWeight: '500',
+  },
+  infoContainer: {
+    backgroundColor: '#16213e',
+    padding: 20,
+    borderRadius: 12,
+    marginVertical: 20,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#8a8a8a',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   buttonContainer: {
     marginBottom: 40,

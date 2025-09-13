@@ -13,35 +13,40 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { bluetoothService } from '../services/BluetoothService';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
-  const [meshEnabled, setMeshEnabled] = useState(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState(true);
   const [autoConnect, setAutoConnect] = useState(true);
   const [notifications, setNotifications] = useState(true);
+  const [deviceInfo, setDeviceInfo] = useState({ id: '', name: '' });
 
   useEffect(() => {
     loadSettings();
+    loadDeviceInfo();
   }, []);
 
   const loadSettings = async () => {
     try {
       const storedUsername = await AsyncStorage.getItem('username') || '';
-      const storedMeshEnabled = await AsyncStorage.getItem('meshEnabled');
       const storedBluetoothEnabled = await AsyncStorage.getItem('bluetoothEnabled');
       const storedAutoConnect = await AsyncStorage.getItem('autoConnect');
       const storedNotifications = await AsyncStorage.getItem('notifications');
 
       setUsername(storedUsername);
-      setMeshEnabled(storedMeshEnabled !== 'false');
       setBluetoothEnabled(storedBluetoothEnabled !== 'false');
       setAutoConnect(storedAutoConnect !== 'false');
       setNotifications(storedNotifications !== 'false');
     } catch (error) {
       console.error('Error loading settings:', error);
     }
+  };
+
+  const loadDeviceInfo = () => {
+    const info = bluetoothService.getDeviceInfo();
+    setDeviceInfo(info);
   };
 
   const saveUsername = async () => {
@@ -77,6 +82,7 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              await bluetoothService.disconnectAll();
               await AsyncStorage.multiRemove(['messages', 'username']);
               Alert.alert('Berhasil', 'Semua data berhasil dihapus');
               router.replace('/');
@@ -89,12 +95,36 @@ export default function SettingsScreen() {
     );
   };
 
-  const showNetworkInfo = () => {
+  const showBluetoothInfo = () => {
     Alert.alert(
-      'Informasi Jaringan',
-      'Gobchat menggunakan teknologi mesh networking dan Bluetooth untuk komunikasi peer-to-peer tanpa memerlukan internet.\n\nFitur ini memungkinkan Anda berkomunikasi bahkan saat tidak ada koneksi internet.',
+      'Informasi Bluetooth',
+      'Gobchat menggunakan teknologi Bluetooth Low Energy (BLE) untuk komunikasi peer-to-peer langsung tanpa memerlukan internet.\n\n' +
+      'Pastikan Bluetooth diaktifkan dan berikan izin lokasi untuk mendeteksi perangkat terdekat.',
       [{ text: 'OK' }]
     );
+  };
+
+  const showDeviceInfo = () => {
+    Alert.alert(
+      'Informasi Perangkat',
+      `Nama Perangkat: ${deviceInfo.name}\n` +
+      `ID Perangkat: ${deviceInfo.id}\n\n` +
+      'ID unik ini digunakan untuk identifikasi perangkat Anda dalam jaringan Gobchat.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const testBluetooth = async () => {
+    try {
+      const initialized = await bluetoothService.initialize();
+      if (initialized) {
+        Alert.alert('Test Berhasil', 'Bluetooth siap digunakan');
+      } else {
+        Alert.alert('Test Gagal', 'Bluetooth tidak tersedia atau tidak diaktifkan');
+      }
+    } catch (error) {
+      Alert.alert('Test Gagal', 'Terjadi kesalahan saat menguji Bluetooth');
+    }
   };
 
   const SettingItem = ({ 
@@ -158,17 +188,6 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Konektivitas</Text>
           
           <SettingItem
-            title="Jaringan Mesh"
-            subtitle="Aktivkan komunikasi mesh peer-to-peer"
-            value={meshEnabled}
-            onValueChange={(value) => {
-              setMeshEnabled(value);
-              saveSetting('meshEnabled', value);
-            }}
-            icon="wifi"
-          />
-
-          <SettingItem
             title="Bluetooth"
             subtitle="Aktivkan komunikasi via Bluetooth"
             value={bluetoothEnabled}
@@ -181,7 +200,7 @@ export default function SettingsScreen() {
 
           <SettingItem
             title="Auto Connect"
-            subtitle="Otomatis terhubung ke peer terdekat"
+            subtitle="Otomatis terhubung ke perangkat terdekat"
             value={autoConnect}
             onValueChange={(value) => {
               setAutoConnect(value);
@@ -207,22 +226,52 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informasi</Text>
+          <Text style={styles.sectionTitle}>Perangkat & Koneksi</Text>
           
-          <TouchableOpacity style={styles.infoItem} onPress={showNetworkInfo}>
-            <Ionicons name="information-circle" size={24} color="#e94560" />
+          <TouchableOpacity style={styles.infoItem} onPress={showDeviceInfo}>
+            <Ionicons name="phone-portrait" size={24} color="#e94560" />
             <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>Tentang Jaringan</Text>
-              <Text style={styles.infoSubtitle}>Pelajari cara kerja mesh networking</Text>
+              <Text style={styles.infoTitle}>Info Perangkat</Text>
+              <Text style={styles.infoSubtitle}>{deviceInfo.name}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.infoItem} onPress={testBluetooth}>
+            <Ionicons name="checkmark-circle" size={24} color="#e94560" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Test Bluetooth</Text>
+              <Text style={styles.infoSubtitle}>Uji koneksi Bluetooth</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.infoItem} onPress={showBluetoothInfo}>
+            <Ionicons name="information-circle" size={24} color="#e94560" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Tentang Teknologi</Text>
+              <Text style={styles.infoSubtitle}>Cara kerja komunikasi Bluetooth</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Informasi Aplikasi</Text>
+          
           <View style={styles.infoItem}>
             <Ionicons name="code-working" size={24} color="#e94560" />
             <View style={styles.infoContent}>
               <Text style={styles.infoTitle}>Versi Aplikasi</Text>
               <Text style={styles.infoSubtitle}>Gobchat v1.0.0</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoItem}>
+            <Ionicons name="shield-checkmark" size={24} color="#e94560" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Privasi</Text>
+              <Text style={styles.infoSubtitle}>Komunikasi langsung, tidak disimpan server</Text>
             </View>
           </View>
         </View>
