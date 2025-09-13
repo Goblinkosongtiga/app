@@ -85,20 +85,27 @@ export default function FileTransferScreen() {
   };
 
   const pickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
+    // For web demo, show mock document picker
+    Alert.alert(
+      'Document Picker',
+      'Pilih jenis dokumen:',
+      [
+        { text: 'PDF Document', onPress: () => mockFileTransfer('document.pdf', 'document') },
+        { text: 'Text File', onPress: () => mockFileTransfer('notes.txt', 'other') },
+        { text: 'Spreadsheet', onPress: () => mockFileTransfer('data.xlsx', 'document') },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
 
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-        await initiateFileTransfer(file);
-      }
-    } catch (error) {
-      console.error('Error picking document:', error);
-      Alert.alert('Error', 'Gagal memilih file');
-    }
+  const mockFileTransfer = (filename: string, type: FileTransfer['type']) => {
+    const mockFile = {
+      name: filename,
+      size: Math.floor(Math.random() * 5000000) + 100000, // Random size between 100KB - 5MB
+      uri: 'mock://file/path',
+      mimeType: type === 'document' ? 'application/pdf' : 'text/plain',
+    };
+    initiateFileTransfer(mockFile);
   };
 
   const pickImage = async () => {
