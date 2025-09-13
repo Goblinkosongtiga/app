@@ -115,55 +115,64 @@ export default function ChatScreen() {
       const initialized = await bluetoothService.initialize();
       setIsBluetoothReady(initialized);
 
-      if (initialized) {
-        // Setup message handler
-        const removeMessageHandler = bluetoothService.onMessage((message) => {
-          const newMessage: Message = {
-            id: message.id,
-            text: message.text,
-            timestamp: message.timestamp,
-            isSent: false,
-            username: message.sender,
-            type: message.type,
-          };
-          
-          setMessages(prev => {
-            const updated = [...prev, newMessage];
-            saveMessages(updated);
-            return updated;
-          });
-
-          // Auto scroll to bottom
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        });
-
-        // Setup connection handler
-        const removeConnectionHandler = bluetoothService.onConnection((device, connected) => {
-          setConnectedPeers(bluetoothService.getConnectedDevices());
-          
-          if (connected) {
-            console.log(`Terhubung dengan ${device.name}`);
-          } else {
-            console.log(`Terputus dari ${device.name}`);
-          }
-        });
-
-        // Start scanning for devices
-        startScanning();
-
-        return () => {
-          removeMessageHandler();
-          removeConnectionHandler();
-        };
-      } else {
+      if (!initialized && Platform.OS === 'web') {
+        // For web platform, show appropriate message
+        Alert.alert(
+          'Platform Terbatas',
+          'Anda menggunakan web browser. Untuk fitur Bluetooth penuh, gunakan aplikasi mobile.',
+          [{ text: 'OK' }]
+        );
+      } else if (!initialized) {
         Alert.alert(
           'Bluetooth Tidak Tersedia',
           'Pastikan Bluetooth diaktifkan untuk menggunakan Gobchat',
           [{ text: 'OK' }]
         );
       }
+
+      // Setup message handler
+      const removeMessageHandler = bluetoothService.onMessage((message) => {
+        const newMessage: Message = {
+          id: message.id,
+          text: message.text,
+          timestamp: message.timestamp,
+          isSent: false,
+          username: message.sender,
+          type: message.type,
+        };
+        
+        setMessages(prev => {
+          const updated = [...prev, newMessage];
+          saveMessages(updated);
+          return updated;
+        });
+
+        // Auto scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      });
+
+      // Setup connection handler
+      const removeConnectionHandler = bluetoothService.onConnection((device, connected) => {
+        setConnectedPeers(bluetoothService.getConnectedDevices());
+        
+        if (connected) {
+          console.log(`Terhubung dengan ${device.name}`);
+        } else {
+          console.log(`Terputus dari ${device.name}`);
+        }
+      });
+
+      // Start scanning for devices if Bluetooth is available
+      if (initialized) {
+        startScanning();
+      }
+
+      return () => {
+        removeMessageHandler();
+        removeConnectionHandler();
+      };
     } catch (error) {
       console.error('Error initializing Bluetooth:', error);
       Alert.alert('Error', 'Gagal menginisialisasi Bluetooth');
