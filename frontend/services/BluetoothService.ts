@@ -1,6 +1,6 @@
-import { BleManager, Device, State, Subscription } from 'react-native-ble-plx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Device as ExpoDevice from 'expo-device';
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 
 interface BluetoothMessage {
   id: string;
